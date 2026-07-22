@@ -13,15 +13,14 @@ window.APP_CONFIG = Object.freeze({
       "ALASTIN Skincare Restorative Skin Complex"
     ]),
     SR: Object.freeze([
-      "200 元以内的小礼物一件",
       "宝宝挑选的一次甜蜜小惊喜"
     ]),
     R: Object.freeze([
-      "抱抱五分钟",
-      "认真夸夸一次",
-      "睡前故事一个",
-      "明天主动提醒喝水",
-      "十分钟放松按摩"
+      "今天早睡辛苦啦",
+      "明天继续加油早睡哦",
+      "宝宝已经很棒啦",,
+      "早睡努力被看见啦",
+      "今晚做得很好哟"
     ])
   })
 });
