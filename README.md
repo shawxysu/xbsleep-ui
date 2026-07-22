@@ -33,6 +33,7 @@ Edit `config.js` only for public site behavior:
 ```js
 DATA_BRANCH: "main",
 STATE_PATH: "state.json",
+TODO_PATH: "state.todo.jsonl",
 APP_TITLE: "我们的早睡养肤小约定",
 ```
 
@@ -80,6 +81,18 @@ Weekly bonuses are added to spendable balance only after the week finishes. This
 Sleep records are append-only. Saving a date that already has a record creates a new `gain` operation, and the newest operation for that date overrides earlier ones for balance, weekly streaks, the calendar, and the monthly rescue-card check. Older entries stay in `state.json` as history.
 
 When a recorded date is selected in the form, the app fills in that date's current effective sleep time and rescue-card checkbox so the record can be adjusted quickly.
+
+## Apple Watch / Shortcuts inbox
+
+The app can also import pending sleep records from `state.todo.jsonl` in the private data repository. This file is a tiny JSONL inbox intended for iOS Shortcuts or other automations. Each non-empty line should be one JSON object:
+
+```json
+{"sleepDate":"2026-07-21","sleepTime":"00:43","source":"apple-watch"}
+```
+
+On connect and refresh, the site reads `state.todo.jsonl`, converts each line into the normal append-only `gain` operation, commits the updated `state.json`, then clears `state.todo.jsonl`. Duplicate lines are allowed; the newest operation for a `sleepDate` still overrides older operations in the visible balance, streaks, and calendar.
+
+The Shortcut only needs to append `sleepDate`, `sleepTime`, and `source`; the website keeps ownership of scoring rules.
 
 ## Gacha implemented
 

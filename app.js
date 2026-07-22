@@ -3,6 +3,7 @@ const config = window.APP_CONFIG;
 const API_VERSION = "2022-11-28";
 const DEFAULT_CREDENTIAL_NAME = "local-demo";
 const DEFAULT_STATE = Object.freeze({ version: 1, operations: [] });
+const DEFAULT_TODO_PATH = "state.todo.jsonl";
 const DEFAULT_SLEEP_TIME = "00:00";
 const DEMO_STARTING_POINTS = 100;
 const DRAW_VIDEO_BY_RARITY = Object.freeze({
@@ -127,14 +128,19 @@ async function connect(event) {
     demoMode = false;
     dataTarget = target;
     token = candidate;
-    const remote = await fetchState();
-    currentState = remote.state;
+    const loadResult = await loadRemoteStateWithPendingTodos();
+    currentState = loadResult.state;
     loadSelectedDateRecord();
     setConnected(true);
     render();
     requestCredentialSave(targetValue, candidate);
     scheduleTokenInputClear(candidate);
-    setStatus("小站打开啦。如果 Chrome 询问是否保存钥匙，可以选择保存。", "success");
+    setStatus(
+      loadResult.imported
+        ? `小站打开啦，顺手收进 ${loadResult.imported} 条手表记录。`
+        : "小站打开啦。如果 Chrome 询问是否保存钥匙，可以选择保存。",
+      "success"
+    );
   } catch (error) {
     token = "";
     dataTarget = null;
@@ -180,9 +186,11 @@ async function refresh() {
   if (!token) return;
   setBusy(true);
   try {
-    currentState = (await fetchState()).state;
+    const loadResult = await loadRemoteStateWithPendingTodos();
+    currentState = loadResult.state;
     loadSelectedDateRecord();
     render();
+    setStatus(loadResult.imported ? `已同步，并收进 ${loadResult.imported} 条手表记录。` : "小账本已同步。", "success");
   } catch (error) {
     setStatus(formatError(error), "error");
   } finally {
@@ -291,7 +299,7 @@ async function submitDraw() {
   }
 }
 
-async function commitTransaction(mutator) {
+async function commitTransaction(mutator, options = {}) {
   if (demoMode) {
     const transaction = mutator(clone(currentState));
     return {
@@ -302,9 +310,10 @@ async function commitTransaction(mutator) {
   }
 
   let lastConflict = null;
+  let remote = options.remote || null;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const remote = await fetchState();
+    if (!remote) remote = await fetchState();
     const transaction = mutator(clone(remote.state));
     const response = await putState(transaction.state, remote.sha, transaction.message);
 
@@ -319,6 +328,7 @@ async function commitTransaction(mutator) {
 
     if (response.status === 409) {
       lastConflict = new Error("小账本刚刚更新过，正在再试一次。");
+      remote = null;
       continue;
     }
 
@@ -326,6 +336,48 @@ async function commitTransaction(mutator) {
   }
 
   throw lastConflict || new Error("这次没有保存成功，请同步后再试。");
+}
+
+async function loadRemoteStateWithPendingTodos() {
+  const remote = await fetchState();
+  return importPendingTodos(remote);
+}
+
+async function importPendingTodos(remote) {
+  const queue = await fetchTodoQueue();
+  if (!queue.todos.length) {
+    return { state: remote.state, imported: 0 };
+  }
+
+  const transaction = await commitTransaction((state) => {
+    assertState(state);
+    const operations = queue.todos.map((todo) => createImportedGainOperation(todo));
+    state.operations.push(...operations);
+
+    return {
+      state,
+      message: `import sleep todos: ${queue.todos.length}`,
+      result: operations
+    };
+  }, { remote });
+
+  await clearTodoQueue(queue.sha);
+  return { state: transaction.state, imported: queue.todos.length };
+}
+
+function createImportedGainOperation(todo) {
+  const evaluation = evaluateSleepTime(todo.sleepTime);
+
+  return {
+    id: createOperationId(),
+    type: "gain",
+    sleepDate: todo.sleepDate,
+    sleepTime: todo.sleepTime,
+    points: evaluation.points,
+    lateReset: evaluation.lateReset,
+    source: todo.source,
+    createdAt: new Date().toISOString()
+  };
 }
 
 function createDemoState() {
@@ -357,6 +409,20 @@ async function fetchState() {
   return { state, sha: body.sha };
 }
 
+async function fetchTodoQueue() {
+  const response = await githubFetch(todoContentsUrl(true), { method: "GET" });
+
+  if (response.status === 404) return { todos: [], sha: null };
+  if (!response.ok) throw await githubError(response);
+
+  const body = await response.json();
+  const text = decodeBase64Utf8(body.content || "");
+  return {
+    todos: parseSleepTodoJsonl(text),
+    sha: body.sha
+  };
+}
+
 async function verifyDataTarget() {
   const target = requireDataTarget();
   const owner = encodeURIComponent(target.owner);
@@ -384,6 +450,29 @@ async function putState(state, sha, message) {
   });
 }
 
+async function clearTodoQueue(sha) {
+  if (!sha) return;
+
+  const response = await putTodoQueue("\n", sha, "clear sleep todo inbox");
+  if (response.ok) return;
+  if (response.status === 409) return;
+  throw await githubError(response);
+}
+
+async function putTodoQueue(text, sha, message) {
+  const payload = {
+    message,
+    content: encodeBase64Utf8(text),
+    branch: config.DATA_BRANCH
+  };
+  if (sha) payload.sha = sha;
+
+  return githubFetch(todoContentsUrl(false), {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
 function githubFetch(url, options) {
   return fetch(url, {
     ...options,
@@ -398,8 +487,16 @@ function githubFetch(url, options) {
 }
 
 function contentsUrl(includeRef) {
+  return contentsUrlForPath(config.STATE_PATH, includeRef);
+}
+
+function todoContentsUrl(includeRef) {
+  return contentsUrlForPath(config.TODO_PATH || DEFAULT_TODO_PATH, includeRef);
+}
+
+function contentsUrlForPath(contentPath, includeRef) {
   const target = requireDataTarget();
-  const path = config.STATE_PATH.split("/").map(encodeURIComponent).join("/");
+  const path = contentPath.split("/").map(encodeURIComponent).join("/");
   const base = `https://api.github.com/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/contents/${path}`;
   return includeRef ? `${base}?ref=${encodeURIComponent(config.DATA_BRANCH)}` : base;
 }
@@ -511,13 +608,20 @@ function probabilityForSsrPull(pull) {
 }
 
 function evaluateSleepTime(value) {
-  if (!/^\d{2}:\d{2}$/.test(value)) throw new UserFacingError("请选择有效的入睡时间。");
+  if (!isValidSleepTime(value)) throw new UserFacingError("请选择有效的入睡时间。");
   const hour = Number(value.slice(0, 2));
 
   if (hour >= 18 || hour === 0) return { points: 1, lateReset: false, label: "超棒早睡夜：+1 分" };
   if (hour === 1) return { points: 0.5, lateReset: false, label: "认真早睡：+0.5 分" };
   if (hour === 2) return { points: 0, lateReset: false, label: "今晚不加分" };
   return { points: 0, lateReset: true, label: "0 分，本周连击奖励归零" };
+}
+
+function isValidSleepTime(value) {
+  if (!/^\d{2}:\d{2}$/.test(value)) return false;
+  const hour = Number(value.slice(0, 2));
+  const minute = Number(value.slice(3, 5));
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
 }
 
 function updateGainPreview() {
@@ -754,6 +858,46 @@ function assertState(state) {
   }
 }
 
+function parseSleepTodoJsonl(text) {
+  const todos = [];
+  const lines = String(text || "").split(/\r?\n/);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (!line) continue;
+
+    let todo = null;
+    try {
+      todo = JSON.parse(line);
+    } catch {
+      throw new UserFacingError(`自动记录待办第 ${index + 1} 行不是有效 JSON。`);
+    }
+
+    todos.push(normalizeSleepTodo(todo, index + 1));
+  }
+
+  return todos;
+}
+
+function normalizeSleepTodo(todo, lineNumber) {
+  if (!todo || typeof todo !== "object" || Array.isArray(todo)) {
+    throw new UserFacingError(`自动记录待办第 ${lineNumber} 行需要是一个 JSON 对象。`);
+  }
+
+  const sleepDate = String(todo.sleepDate || "").trim();
+  const sleepTime = String(todo.sleepTime || "").trim();
+  const source = String(todo.source || "shortcut").trim() || "shortcut";
+
+  if (!isValidLocalDateString(sleepDate)) {
+    throw new UserFacingError(`自动记录待办第 ${lineNumber} 行的 sleepDate 需要是 YYYY-MM-DD。`);
+  }
+  if (!isValidSleepTime(sleepTime)) {
+    throw new UserFacingError(`自动记录待办第 ${lineNumber} 行的 sleepTime 需要是 HH:mm。`);
+  }
+
+  return { sleepDate, sleepTime, source };
+}
+
 function parseDataTarget(value) {
   const normalized = value
     .trim()
@@ -907,6 +1051,11 @@ function mondayKey(dateString) {
   const distance = day === 0 ? -6 : 1 - day;
   date.setDate(date.getDate() + distance);
   return formatLocalDate(date);
+}
+
+function isValidLocalDateString(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  return formatLocalDate(parseLocalDate(value)) === value;
 }
 
 function hasRescueCardForMonth(operations, dateString, ignoredDateString = null) {

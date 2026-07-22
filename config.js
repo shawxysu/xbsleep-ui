@@ -5,6 +5,7 @@
 window.APP_CONFIG = Object.freeze({
   DATA_BRANCH: "main",
   STATE_PATH: "state.json",
+  TODO_PATH: "state.todo.jsonl",
   APP_TITLE: "我们的早睡养肤小约定",
 
   // Edit these rewards freely. A cryptographically secure browser RNG picks one.
