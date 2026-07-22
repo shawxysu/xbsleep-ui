@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
+  <title>我们的早睡养肤小约定</title>
+  <link rel="stylesheet" href="styles.css?v=20260722-13">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <h1 id="appTitle">我们的早睡养肤小约定</h1>
+      <div id="connectionBadge" class="badge badge-offline" hidden>待开启</div>
+    </header>
+
+    <section id="connectPanel" class="panel connect-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="section-kicker">私密入口</p>
+          <h2>打开我们的小约定</h2>
+        </div>
+      </div>
+      <p class="panel-copy">输入小账本位置和只属于这个小站的私密钥匙，就可以查看和保存早睡记录。关掉或刷新页面后，小站会重新锁上。</p>
+
+      <form id="connectForm" class="form-grid" autocomplete="on" novalidate>
+        <label class="credential-field">
+          <span>小账本位置</span>
+          <input id="credentialUsername" name="username" autocomplete="username" value="local-demo" placeholder="username/sleep-points-data" required>
+        </label>
+        <label class="token-field">
+          <span>私密钥匙</span>
+          <input id="tokenInput" name="password" type="password" autocomplete="current-password" spellcheck="false">
+        </label>
+        <button class="button button-primary" type="submit">进入小站</button>
+      </form>
+      <p class="form-help">小账本位置形如 <code>username/sleep-points-data</code>；可以让浏览器替你记住位置和钥匙。</p>
+    </section>
+
+    <p id="connectionMessage" class="status-message global-status" role="status" aria-live="polite"></p>
+
+    <section id="appPanel" class="app-content" hidden>
+      <div class="operation-grid">
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">今晚记录</p>
+              <h2>宝宝今晚几点睡</h2>
+            </div>
+            <span class="mini-pill">可修改</span>
+          </div>
+          <form id="gainForm" class="stack-form">
+            <label>
+              <span>是哪一晚</span>
+              <input id="sleepDateInput" type="date" required>
+            </label>
+            <label>
+              <span>准备睡着的时间</span>
+              <input id="sleepTimeInput" type="time" required>
+            </label>
+            <label class="check-row">
+              <input id="rescueCardInput" type="checkbox">
+              <span>使用救场卡</span>
+            </label>
+            <div id="gainPreview" class="preview-box">请选择入睡时间</div>
+            <button class="button button-primary" type="submit">记下这一晚</button>
+          </form>
+        </section>
+
+        <section class="panel draw-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">奖励时刻</p>
+              <h2>用 1 分抽奖励</h2>
+            </div>
+            <span class="mini-pill">越抽越近</span>
+          </div>
+          <button id="drawButton" class="button button-accent" type="button">抽奖励</button>
+        </section>
+      </div>
+
+      <section class="stats-grid" aria-label="积分概览">
+        <article class="stat-card stat-primary">
+          <span>可兑换积分</span>
+          <strong id="balanceValue">0</strong>
+          <small>1 分抽一次</small>
+        </article>
+        <article class="stat-card">
+          <span>本周早睡</span>
+          <strong><span id="weekNightsValue">0</span>/7</strong>
+          <small id="weekBonusHint">本周奖励待确认</small>
+        </article>
+        <article class="stat-card">
+          <span>大奖</span>
+          <strong><span id="ssrPityValue">0</span>/50</strong>
+          <small id="ssrChanceHint">大奖正在靠近</small>
+        </article>
+        <article class="stat-card">
+          <span>小惊喜</span>
+          <strong><span id="srPityValue">0</span>/9</strong>
+          <small>第 9 抽保底</small>
+        </article>
+      </section>
+
+      <section class="panel calendar-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">小账本</p>
+            <h2>这个月的早睡日历</h2>
+          </div>
+          <div class="panel-actions">
+            <div class="calendar-nav" aria-label="切换月份">
+              <button id="prevMonthButton" class="icon-button" type="button" aria-label="上个月" title="上个月">‹</button>
+              <strong id="calendarTitle" class="calendar-title"></strong>
+              <button id="nextMonthButton" class="icon-button" type="button" aria-label="下个月" title="下个月">›</button>
+            </div>
+            <button id="refreshButton" class="button button-secondary" type="button">同步一下</button>
+          </div>
+        </div>
+        <div class="calendar-weekdays" aria-hidden="true">
+          <span>一</span>
+          <span>二</span>
+          <span>三</span>
+          <span>四</span>
+          <span>五</span>
+          <span>六</span>
+          <span>日</span>
+        </div>
+        <div id="calendarGrid" class="calendar-grid" aria-label="早睡日历"></div>
+        <div class="calendar-legend" aria-label="颜色说明">
+          <span><i class="legend-dot calendar-green"></i>1:00 前</span>
+          <span><i class="legend-dot calendar-light-green"></i>1:00–1:59</span>
+          <span><i class="legend-dot calendar-light-yellow"></i>2:00–2:59</span>
+          <span><i class="legend-dot calendar-light-red"></i>3:00 后</span>
+          <span><i class="legend-dot calendar-light-blue"></i>救场卡</span>
+        </div>
+      </section>
+
+      <section class="panel rules-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">我们的约定</p>
+            <h2>早睡、连击和抽奖怎么算</h2>
+          </div>
+        </div>
+        <div class="rules-grid">
+          <div><strong>凌晨 1:00 前</strong><span>超棒早睡夜，+1 分</span></div>
+          <div><strong>凌晨 1:00–1:59</strong><span>也算认真早睡，+0.5 分</span></div>
+          <div><strong>凌晨 2:00–2:59</strong><span>今晚先不加分</span></div>
+          <div><strong>凌晨 3:00 或更晚</strong><span>本周连击奖励会归零</span></div>
+          <div><strong>每月 1 张救场卡</strong><span>勾选后，这一晚按 1:00 前计算</span></div>
+          <div><strong>一周 ≥5 个早睡夜</strong><span>周末再奖励 +1 分</span></div>
+          <div><strong>一周 7 晚都早睡</strong><span>额外再奖励 +1 分</span></div>
+          <div><strong>每次抽奖励</strong><span>消耗 1 分</span></div>
+          <div><strong>心动大奖</strong><span>前 40 抽小概率；第 50 抽保底</span></div>
+          <div><strong>甜蜜小惊喜</strong><span>第 9 抽保底</span></div>
+          <div><strong>暖暖小奖励</strong><span>每抽都会有奖励</span></div>
+        </div>
+        <p class="form-help">每天拿到的基础分会马上收进口袋；周连击奖励会等这一周结束后再一起放进来。</p>
+      </section>
+    </section>
+
+    <div id="drawModal" class="modal-backdrop" hidden>
+      <section class="draw-modal" role="dialog" aria-modal="true" aria-labelledby="drawModalTitle" aria-describedby="drawReward">
+        <video id="drawVideo" class="draw-video" muted autoplay loop playsinline preload="metadata"></video>
+        <div class="draw-modal-content">
+          <span id="drawRarity" class="rarity">暖暖小奖励</span>
+          <h2 id="drawModalTitle">抽到啦</h2>
+          <strong id="drawReward"></strong>
+          <button id="confirmDrawButton" class="button button-primary" type="button">收下这个奖励</button>
+        </div>
+      </section>
+    </div>
+
+    <footer>
+      <span id="repositoryLabel"></span>
+      <button id="disconnectButton" class="text-button" type="button" hidden>锁上小站</button>
+    </footer>
+  </main>
+
+  <script src="config.js?v=20260722-13"></script>
+  <script type="module" src="app.js?v=20260722-13"></script>
+</body>
+</html>
