@@ -3,6 +3,7 @@ const config = window.APP_CONFIG;
 const API_VERSION = "2022-11-28";
 const DEFAULT_CREDENTIAL_NAME = "local-demo";
 const DEFAULT_STATE = Object.freeze({ version: 1, operations: [] });
+const DEFAULT_SLEEP_TIME = "00:00";
 const DEMO_STARTING_POINTS = 100;
 const DRAW_VIDEO_BY_RARITY = Object.freeze({
   SSR: "assets/ssr.mp4",
@@ -64,6 +65,7 @@ function initialize() {
   elements.repositoryLabel.textContent = "每一次认真早睡，都会被好好记住。";
   elements.sleepDateInput.value = defaultSleepDate();
   elements.sleepDateInput.max = formatLocalDate(new Date());
+  elements.sleepTimeInput.value = DEFAULT_SLEEP_TIME;
   updateGainPreview();
 
   elements.connectForm.addEventListener("submit", connect);
@@ -127,11 +129,12 @@ async function connect(event) {
     token = candidate;
     const remote = await fetchState();
     currentState = remote.state;
-    elements.tokenInput.value = "";
     loadSelectedDateRecord();
     setConnected(true);
     render();
-    setStatus("小站打开啦。私密钥匙只会停留在当前页面里。", "success");
+    requestCredentialSave(targetValue, candidate);
+    scheduleTokenInputClear(candidate);
+    setStatus("小站打开啦。如果 Chrome 询问是否保存钥匙，可以选择保存。", "success");
   } catch (error) {
     token = "";
     dataTarget = null;
@@ -557,15 +560,13 @@ function loadSelectedDateRecord() {
 
   const existing = effectiveGainForDate(currentState.operations, sleepDate);
   if (!existing) {
-    if (loadedRecordDate) {
-      elements.sleepTimeInput.value = "";
-      elements.rescueCardInput.checked = false;
-    }
+    elements.sleepTimeInput.value = DEFAULT_SLEEP_TIME;
+    elements.rescueCardInput.checked = false;
     loadedRecordDate = null;
     return false;
   }
 
-  elements.sleepTimeInput.value = existing.sleepTime || "";
+  elements.sleepTimeInput.value = existing.sleepTime || DEFAULT_SLEEP_TIME;
   elements.rescueCardInput.checked = Boolean(existing.rescueCard);
   loadedRecordDate = sleepDate;
   return true;

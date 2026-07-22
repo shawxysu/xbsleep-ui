@@ -7,7 +7,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'">
   <title>我们的早睡养肤小约定</title>
-  <link rel="stylesheet" href="styles.css?v=20260722-13">
+  <link rel="stylesheet" href="styles.css?v=20260722-15">
 </head>
 <body>
   <main class="shell">
@@ -25,7 +25,7 @@
       </div>
       <p class="panel-copy">输入小账本位置和只属于这个小站的私密钥匙，就可以查看和保存早睡记录。关掉或刷新页面后，小站会重新锁上。</p>
 
-      <form id="connectForm" class="form-grid" autocomplete="on" novalidate>
+      <form id="connectForm" class="form-grid" method="post" action="./" autocomplete="on" novalidate>
         <label class="credential-field">
           <span>小账本位置</span>
           <input id="credentialUsername" name="username" autocomplete="username" value="local-demo" placeholder="username/sleep-points-data" required>
@@ -57,7 +57,7 @@
               <input id="sleepDateInput" type="date" required>
             </label>
             <label>
-              <span>准备睡着的时间</span>
+              <span>入睡时间</span>
               <input id="sleepTimeInput" type="time" required>
             </label>
             <label class="check-row">
@@ -180,7 +180,7 @@
     </footer>
   </main>
 
-  <script src="config.js?v=20260722-13"></script>
-  <script type="module" src="app.js?v=20260722-13"></script>
+  <script src="config.js?v=20260722-15"></script>
+  <script type="module" src="app.js?v=20260722-15"></script>
 </body>
 </html>
