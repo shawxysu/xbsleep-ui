@@ -132,8 +132,6 @@ async function connect(event) {
     loadSelectedDateRecord();
     setConnected(true);
     render();
-    requestCredentialSave(targetValue, candidate);
-    scheduleTokenInputClear(candidate);
     setStatus("小站打开啦。如果 Chrome 询问是否保存钥匙，可以选择保存。", "success");
   } catch (error) {
     token = "";
