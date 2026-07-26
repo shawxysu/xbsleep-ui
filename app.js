@@ -3,6 +3,7 @@ const config = window.APP_CONFIG;
 const API_VERSION = "2022-11-28";
 const COMMIT_RETRY_LIMIT = 4;
 const COMMIT_CONFLICT_RETRY_DELAY_MS = 500;
+const CREDENTIAL_AUTO_CONNECT_DELAY_MS = 250;
 const DEFAULT_CREDENTIAL_NAME = "local-demo";
 const DEFAULT_STATE = Object.freeze({ version: 1, operations: [] });
 const DEFAULT_TODO_PATH = "state.todo.jsonl";
@@ -25,6 +26,7 @@ let demoMode = false;
 let dataTarget = null;
 let calendarMonth = startOfMonth(new Date());
 let loadedRecordDate = null;
+let credentialAutoConnectTimer = null;
 
 const elements = {
   appTitle: document.querySelector("#appTitle"),
@@ -72,6 +74,10 @@ function initialize() {
   updateGainPreview();
 
   elements.connectForm.addEventListener("submit", connect);
+  elements.credentialUsername.addEventListener("input", handleCredentialFieldEvent);
+  elements.credentialUsername.addEventListener("change", handleCredentialFieldEvent);
+  elements.tokenInput.addEventListener("input", handleCredentialFieldEvent);
+  elements.tokenInput.addEventListener("change", handleCredentialFieldEvent);
   elements.gainForm.addEventListener("submit", submitGain);
   elements.sleepDateInput.addEventListener("input", handleSleepDateChange);
   elements.sleepDateInput.addEventListener("change", handleSleepDateChange);
@@ -102,6 +108,7 @@ function validateConfig() {
 
 async function connect(event) {
   event.preventDefault();
+  cancelCredentialAutoConnect();
   const candidate = elements.tokenInput.value.trim();
   const targetValue = elements.credentialUsername.value.trim();
 
@@ -153,6 +160,51 @@ async function connect(event) {
   }
 }
 
+function handleCredentialFieldEvent(event) {
+  if (event.type === "change" || isAutofillEvent(event)) {
+    scheduleCredentialAutoConnect();
+  }
+}
+
+function isAutofillEvent(event) {
+  if (
+    typeof InputEvent !== "undefined" &&
+    event instanceof InputEvent &&
+    event.inputType === "insertReplacementText"
+  ) {
+    return true;
+  }
+
+  for (const selector of [":autofill", ":-webkit-autofill"]) {
+    try {
+      if (event.currentTarget.matches(selector)) return true;
+    } catch {
+      // Ignore unsupported autofill pseudo-classes.
+    }
+  }
+  return false;
+}
+
+function scheduleCredentialAutoConnect() {
+  cancelCredentialAutoConnect();
+  credentialAutoConnectTimer = window.setTimeout(() => {
+    credentialAutoConnectTimer = null;
+    if (busy || demoMode) return;
+
+    const candidate = elements.tokenInput.value.trim();
+    const target = parseDataTarget(elements.credentialUsername.value.trim());
+    if (!candidate || !target) return;
+
+    elements.connectForm.requestSubmit();
+  }, CREDENTIAL_AUTO_CONNECT_DELAY_MS);
+}
+
+function cancelCredentialAutoConnect() {
+  if (credentialAutoConnectTimer === null) return;
+  window.clearTimeout(credentialAutoConnectTimer);
+  credentialAutoConnectTimer = null;
+}
+
 function startDemo() {
   demoMode = true;
   token = "";
@@ -166,6 +218,7 @@ function startDemo() {
 }
 
 function disconnect() {
+  cancelCredentialAutoConnect();
   const wasDemo = demoMode;
   demoMode = false;
   token = "";

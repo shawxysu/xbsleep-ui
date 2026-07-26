@@ -62,6 +62,8 @@ Chrome autofill is heuristic; a website cannot force it. The reliable setup is t
 
 On the app, select the saved credential in the token field if Chrome does not fill it automatically.
 
+After a password manager fills the repository and token, the app submits the connection form automatically. The enter button remains available when autofill events are not exposed by the browser.
+
 The app clears the visible token field after connecting. It keeps the token only in JavaScript memory for the lifetime of the tab; refreshing or disconnecting removes it.
 
 ## Scoring implemented
