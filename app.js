@@ -929,6 +929,30 @@ function canUseLocalDemo() {
   return ["localhost", "127.0.0.1", "::1", ""].includes(window.location.hostname);
 }
 
+function requestCredentialSave(username, password) {
+  if (!username || !password) return;
+  if (!("PasswordCredential" in window) || !navigator.credentials?.store) return;
+
+  try {
+    const credential = new PasswordCredential({
+      id: username,
+      name: username,
+      password
+    });
+    navigator.credentials.store(credential).catch(() => {});
+  } catch {
+    // Browser password managers are heuristic; failing here should not block login.
+  }
+}
+
+function scheduleTokenInputClear(expectedToken) {
+  window.setTimeout(() => {
+    if (elements.tokenInput.value === expectedToken) {
+      elements.tokenInput.value = "";
+    }
+  }, 500);
+}
+
 async function githubError(response) {
   let detail = "";
   try {
