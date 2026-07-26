@@ -1,6 +1,8 @@
 const config = window.APP_CONFIG;
 
 const API_VERSION = "2022-11-28";
+const COMMIT_RETRY_LIMIT = 4;
+const COMMIT_CONFLICT_RETRY_DELAY_MS = 500;
 const DEFAULT_CREDENTIAL_NAME = "local-demo";
 const DEFAULT_STATE = Object.freeze({ version: 1, operations: [] });
 const DEFAULT_TODO_PATH = "state.todo.jsonl";
@@ -312,7 +314,7 @@ async function commitTransaction(mutator, options = {}) {
   let lastConflict = null;
   let remote = options.remote || null;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < COMMIT_RETRY_LIMIT; attempt += 1) {
     if (!remote) remote = await fetchState();
     const transaction = mutator(clone(remote.state));
     const response = await putState(transaction.state, remote.sha, transaction.message);
@@ -327,8 +329,9 @@ async function commitTransaction(mutator, options = {}) {
     }
 
     if (response.status === 409) {
-      lastConflict = new Error("小账本刚刚更新过，正在再试一次。");
+      lastConflict = new Error("小账本刚刚更新过，刚才几次同步都读到了旧版本，请等几秒再试。");
       remote = null;
+      await delay(COMMIT_CONFLICT_RETRY_DELAY_MS * (attempt + 1));
       continue;
     }
 
@@ -473,8 +476,9 @@ async function putTodoQueue(text, sha, message) {
   });
 }
 
-function githubFetch(url, options) {
+function githubFetch(url, options = {}) {
   return fetch(url, {
+    cache: "no-store",
     ...options,
     headers: {
       Accept: "application/vnd.github+json",
@@ -498,7 +502,13 @@ function contentsUrlForPath(contentPath, includeRef) {
   const target = requireDataTarget();
   const path = contentPath.split("/").map(encodeURIComponent).join("/");
   const base = `https://api.github.com/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}/contents/${path}`;
-  return includeRef ? `${base}?ref=${encodeURIComponent(config.DATA_BRANCH)}` : base;
+  if (!includeRef) return base;
+
+  const params = new URLSearchParams({
+    ref: config.DATA_BRANCH,
+    _: freshRequestToken()
+  });
+  return `${base}?${params}`;
 }
 
 function calculateSummary(operations) {
@@ -1053,6 +1063,16 @@ function decodeUtf8(bytes) {
 
 function clone(value) {
   return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
+}
+
+function freshRequestToken() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function roundHalf(value) {
