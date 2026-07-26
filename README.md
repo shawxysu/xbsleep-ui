@@ -84,6 +84,8 @@ When a recorded date is selected in the form, the app fills in that date's curre
 
 ## Apple Watch / Shortcuts inbox
 
+See [Apple Watch Sleep Import with iOS Shortcuts](APPLE_WATCH_SHORTCUT.md) for the complete action-by-action setup guide.
+
 The app can also import pending sleep records from `state.todo.jsonl` in the private data repository. This file is a tiny JSONL inbox intended for iOS Shortcuts or other automations. Each non-empty line should be one JSON object:
 
 ```json
