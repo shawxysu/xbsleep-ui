@@ -7,6 +7,7 @@ const CREDENTIAL_AUTO_CONNECT_DELAY_MS = 250;
 const DEFAULT_CREDENTIAL_NAME = "local-demo";
 const DEFAULT_STATE = Object.freeze({ version: 1, operations: [] });
 const DEFAULT_TODO_PATH = "state.todo.jsonl";
+const TODO_QUEUE_TEMPLATE = '# {"sleepDate":"2026-07-30","sleepTime":"00:00","source":"apple-health"}\n';
 const DEFAULT_SLEEP_TIME = "00:00";
 const DEMO_STARTING_POINTS = 100;
 const DRAW_VIDEO_BY_RARITY = Object.freeze({
@@ -267,10 +268,6 @@ async function submitGain(event) {
   try {
     const transaction = await commitTransaction((state) => {
       assertState(state);
-      if (useRescueCard && hasRescueCardForMonth(state.operations, sleepDate, sleepDate)) {
-        throw new UserFacingError("这个月的救场卡已经用过啦。");
-      }
-
       const evaluation = useRescueCard ? RESCUE_CARD_EVALUATION : baseEvaluation;
 
       const operation = {
@@ -468,7 +465,18 @@ async function fetchState() {
 async function fetchTodoQueue() {
   const response = await githubFetch(todoContentsUrl(true), { method: "GET" });
 
-  if (response.status === 404) return { todos: [], sha: null };
+  if (response.status === 404) {
+    const initializeResponse = await putTodoQueue(
+      TODO_QUEUE_TEMPLATE,
+      null,
+      "initialize sleep todo inbox"
+    );
+    if (initializeResponse.status === 409) return fetchTodoQueue();
+    if (!initializeResponse.ok) throw await githubError(initializeResponse);
+
+    const body = await initializeResponse.json();
+    return { todos: [], sha: body.content?.sha || null };
+  }
   if (!response.ok) throw await githubError(response);
 
   const body = await response.json();
@@ -509,7 +517,7 @@ async function putState(state, sha, message) {
 async function clearTodoQueue(sha) {
   if (!sha) return;
 
-  const response = await putTodoQueue("\n", sha, "clear sleep todo inbox");
+  const response = await putTodoQueue(TODO_QUEUE_TEMPLATE, sha, "clear sleep todo inbox");
   if (response.ok) return;
   if (response.status === 409) return;
   throw await githubError(response);
@@ -695,10 +703,6 @@ function updateGainPreview() {
   if (useRescueCard) {
     if (!sleepDate) {
       elements.gainPreview.textContent = "请选择是哪一晚，才能使用救场卡";
-      return;
-    }
-    if (hasRescueCardForMonth(currentState.operations, sleepDate, sleepDate)) {
-      elements.gainPreview.textContent = "这个月的救场卡已经用过啦";
       return;
     }
     if (!sleepTime) {
@@ -927,7 +931,7 @@ function parseSleepTodoJsonl(text) {
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index].trim();
-    if (!line) continue;
+    if (!line || line.startsWith("#")) continue;
 
     let todo = null;
     try {
@@ -1153,19 +1157,6 @@ function mondayKey(dateString) {
 function isValidLocalDateString(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   return formatLocalDate(parseLocalDate(value)) === value;
-}
-
-function hasRescueCardForMonth(operations, dateString, ignoredDateString = null) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
-  const targetMonth = dateString.slice(0, 7);
-  return effectiveGains(operations).some((operation) => {
-    const operationDate = String(operation.sleepDate || "");
-    return (
-      operationDate !== ignoredDateString
-      && operation.rescueCard
-      && operationDate.slice(0, 7) === targetMonth
-    );
-  });
 }
 
 function parseLocalDate(value) {

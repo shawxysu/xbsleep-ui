@@ -72,7 +72,7 @@ The app clears the visible token field after connecting. It keeps the token only
 - 01:00–01:59: +0.5
 - 02:00–02:59: +0
 - 03:00 or later: +0 and invalidates that week's streak bonus
-- One rescue card per calendar month: the selected night counts as before 01:00
+- Rescue cards can be used without a monthly limit; a selected night counts as before 01:00
 - Completed Monday–Sunday week with at least 5 scoring nights: +1
 - Completed week with all 7 nights scoring: +1 additional
 
@@ -80,7 +80,7 @@ Weekly bonuses are added to spendable balance only after the week finishes. This
 
 ## Record updates
 
-Sleep records are append-only. Saving a date that already has a record creates a new `gain` operation, and the newest operation for that date overrides earlier ones for balance, weekly streaks, the calendar, and the monthly rescue-card check. Older entries stay in `state.json` as history.
+Sleep records are append-only. Saving a date that already has a record creates a new `gain` operation, and the newest operation for that date overrides earlier ones for balance, weekly streaks, and the calendar. Older entries stay in `state.json` as history.
 
 When a recorded date is selected in the form, the app fills in that date's current effective sleep time and rescue-card checkbox so the record can be adjusted quickly.
 
@@ -94,7 +94,13 @@ The app can also import pending sleep records from `state.todo.jsonl` in the pri
 {"sleepDate":"2026-07-21","sleepTime":"00:43","source":"apple-watch"}
 ```
 
-On connect and refresh, the site reads `state.todo.jsonl`, converts each line into the normal append-only `gain` operation, commits the updated `state.json`, then clears `state.todo.jsonl`. Duplicate lines are allowed; the newest operation for a `sleepDate` still overrides older operations in the visible balance, streaks, and calendar.
+Lines beginning with `#` are comments and are ignored. If the inbox does not exist, the app creates it with this commented example:
+
+```text
+# {"sleepDate":"2026-07-30","sleepTime":"00:00","source":"apple-health"}
+```
+
+On connect and refresh, the site reads `state.todo.jsonl`, converts each active JSONL line into the normal append-only `gain` operation, commits the updated `state.json`, then resets the inbox to the commented example. Duplicate lines are allowed; the newest operation for a `sleepDate` still overrides older operations in the visible balance, streaks, and calendar.
 
 The Shortcut only needs to append `sleepDate`, `sleepTime`, and `source`; the website keeps ownership of scoring rules.
 

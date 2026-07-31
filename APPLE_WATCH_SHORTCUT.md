@@ -9,7 +9,7 @@ The next time the website connects or refreshes, it:
 1. Reads every pending JSONL line.
 2. Converts each line into a normal sleep record.
 3. Updates `state.json`.
-4. Clears `state.todo.jsonl`.
+4. Resets `state.todo.jsonl` to a commented example line.
 
 The Shortcut sends only these three fields:
 
@@ -27,19 +27,23 @@ Action names can differ slightly between iOS versions and display languages.
 
 The Shortcut writes to the same private repository that stores `state.json`.
 
-1. Open the private data repository on GitHub.
-2. Create a root-level file named `state.todo.jsonl`.
-3. Leave the file empty except for a blank line or a single space.
-4. Commit the file to the branch used by the website, normally `main`.
-5. Confirm that [`config.js`](./config.js) contains:
+1. Connect the website to the private data repository once. The website creates
+   `state.todo.jsonl` automatically if it is missing.
+2. Alternatively, create the file manually with this content:
+
+   ```text
+   # {"sleepDate":"2026-07-30","sleepTime":"00:00","source":"apple-health"}
+   ```
+
+3. Confirm that [`config.js`](./config.js) contains:
 
    ```js
    TODO_PATH: "state.todo.jsonl",
    ```
 
-The file must already exist because the Shortcut below updates it using its
-current Git blob SHA. The website also keeps the file in place when it clears
-the inbox.
+The file must exist before the Shortcut runs because the Shortcut updates it
+using its current Git blob SHA. The website keeps the file in place and restores
+the commented example after processing. Lines beginning with `#` are ignored.
 
 ## 2. Create a GitHub token
 
@@ -299,7 +303,8 @@ lines:
 [NewTodoLine]
 ```
 
-It is fine if this creates an extra blank line. The website ignores blank lines.
+It is fine if this creates an extra blank line. The website ignores blank lines
+and lines beginning with `#`.
 
 1. Add `Set Variable` and name this text `NewTodoText`.
 2. Add `Base64 Encode`.
@@ -363,7 +368,8 @@ Run the Shortcut manually before creating an automation:
 6. Open the sleep website and connect to the private data repository.
 7. Refresh the website if it was already open.
 8. Confirm that the sleep record appears on the expected night.
-9. Reopen `state.todo.jsonl` on GitHub and confirm that the website cleared it.
+9. Reopen `state.todo.jsonl` on GitHub and confirm that only the commented
+   example remains.
 
 If the date is one day too early or late, inspect `SleepStart`, `SleepHour`, and
 `SleepNightDate` with temporary `Quick Look` actions before changing the date
@@ -406,16 +412,17 @@ removed once the automation has proven reliable.
 ### `404 Not Found`
 
 - Check `Owner`, `Repo`, `TodoPath`, and `Branch` for spelling and capitalization.
-- Confirm that `state.todo.jsonl` already exists in the private data repository.
+- Connect the website once to initialize `state.todo.jsonl`, or create it
+  manually using the commented example from section 1.
 - A private repository can also return `404` when the token cannot access it.
 
 ### `409 Conflict`
 
 The inbox changed between the Shortcut's `GET` and `PUT`, usually because the
-website cleared it or another Shortcut run updated it. Run the Shortcut again.
+website reset it or another Shortcut run updated it. Run the Shortcut again.
 It will fetch the newest SHA before retrying.
 
-A clear conflict after the website has imported the record can leave the same
+A reset conflict after the website has imported the record can leave the same
 line in the inbox. Importing it again is acceptable in this app because the
 newest sleep record for that date overrides the older one.
 
@@ -449,4 +456,3 @@ Remove whitespace from `EncodedOldContent` before decoding:
 - [Apple: Find Health Samples supports sleep phases](https://support.apple.com/en-mide/101583)
 - [Apple: Make API requests with Get Contents of URL](https://support.apple.com/en-ie/guide/shortcuts/apd58d46713f/ios)
 - [GitHub: Repository Contents API](https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28)
-
