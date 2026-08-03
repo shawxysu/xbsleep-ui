@@ -73,10 +73,10 @@ The app clears the visible token field after connecting. It keeps the token only
 - 02:00–02:59: +0
 - 03:00 or later: +0 and invalidates that week's streak bonus
 - Rescue cards can be used without a monthly limit; a selected night counts as before 01:00
-- Completed Monday–Sunday week with at least 5 scoring nights: +1
-- Completed week with all 7 nights scoring: +1 additional
+- Monday–Sunday week with at least 5 scoring nights: +1
+- Week with all 7 nights scoring: +1 additional
 
-Weekly bonuses are added to spendable balance only after the week finishes. This prevents a provisional bonus from being spent and then revoked by a later 03:00+ night.
+Weekly bonuses are added to the spendable balance immediately after all seven Monday–Sunday records are available. The bonus is not spendable after only five scoring records, so a late-reset record later in the week cannot revoke points that were already spent.
 
 ## Record updates
 
@@ -100,7 +100,7 @@ Lines beginning with `#` are comments and are ignored. If the inbox does not exi
 # {"sleepDate":"2026-07-30","sleepTime":"00:00","source":"apple-health"}
 ```
 
-On connect and refresh, the site reads `state.todo.jsonl`, converts each active JSONL line into the normal append-only `gain` operation, commits the updated `state.json`, then resets the inbox to the commented example. Duplicate lines are allowed; the newest operation for a `sleepDate` still overrides older operations in the visible balance, streaks, and calendar.
+On connect and refresh, the site reads `state.todo.jsonl`, converts each active JSONL line for an unrecorded date into the normal append-only `gain` operation, commits the updated `state.json`, then resets the inbox to the commented example. A queued item is skipped if its `sleepDate` is already recorded or was accepted earlier in the same queue. The sync status reports both imported and skipped counts.
 
 The Shortcut only needs to append `sleepDate`, `sleepTime`, and `source`; the website keeps ownership of scoring rules.
 

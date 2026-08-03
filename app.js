@@ -145,9 +145,10 @@ async function connect(event) {
     render();
     requestCredentialSave(targetValue, candidate);
     scheduleTokenInputClear(candidate);
+    const importSummary = formatTodoImportSummary(loadResult);
     setStatus(
-      loadResult.imported
-        ? `小站打开啦，顺手收进 ${loadResult.imported} 条手表记录。`
+      importSummary
+        ? `小站打开啦，${importSummary}。`
         : "小站打开啦。如果 Chrome 询问是否保存钥匙，可以选择保存。",
       "success"
     );
@@ -246,7 +247,8 @@ async function refresh() {
     currentState = loadResult.state;
     loadSelectedDateRecord();
     render();
-    setStatus(loadResult.imported ? `已同步，并收进 ${loadResult.imported} 条手表记录。` : "小账本已同步。", "success");
+    const importSummary = formatTodoImportSummary(loadResult);
+    setStatus(importSummary ? `已同步，${importSummary}。` : "小账本已同步。", "success");
   } catch (error) {
     setStatus(formatError(error), "error");
   } finally {
@@ -367,6 +369,13 @@ async function commitTransaction(mutator, options = {}) {
   for (let attempt = 0; attempt < COMMIT_RETRY_LIMIT; attempt += 1) {
     if (!remote) remote = await fetchState();
     const transaction = mutator(clone(remote.state));
+    if (transaction.skipCommit) {
+      return {
+        state: transaction.state,
+        result: transaction.result,
+        commitSha: remote.sha || "unchanged"
+      };
+    }
     const response = await putState(transaction.state, remote.sha, transaction.message);
 
     if (response.ok) {
@@ -399,23 +408,46 @@ async function loadRemoteStateWithPendingTodos() {
 async function importPendingTodos(remote) {
   const queue = await fetchTodoQueue();
   if (!queue.todos.length) {
-    return { state: remote.state, imported: 0 };
+    return { state: remote.state, imported: 0, skipped: 0 };
   }
 
   const transaction = await commitTransaction((state) => {
     assertState(state);
-    const operations = queue.todos.map((todo) => createImportedGainOperation(todo));
+    const { operations, skipped } = selectImportableTodos(state.operations, queue.todos);
     state.operations.push(...operations);
 
     return {
       state,
-      message: `import sleep todos: ${queue.todos.length}`,
-      result: operations
+      message: `import sleep todos: ${operations.length}; skipped existing dates: ${skipped}`,
+      result: { operations, skipped },
+      skipCommit: operations.length === 0
     };
   }, { remote });
 
   await clearTodoQueue(queue.sha);
-  return { state: transaction.state, imported: queue.todos.length };
+  return {
+    state: transaction.state,
+    imported: transaction.result.operations.length,
+    skipped: transaction.result.skipped
+  };
+}
+
+function selectImportableTodos(operations, todos) {
+  const recordedDates = new Set(effectiveGains(operations).map((gain) => gain.sleepDate));
+  const importedOperations = [];
+  let skipped = 0;
+
+  for (const todo of todos) {
+    if (recordedDates.has(todo.sleepDate)) {
+      skipped += 1;
+      continue;
+    }
+
+    recordedDates.add(todo.sleepDate);
+    importedOperations.push(createImportedGainOperation(todo));
+  }
+
+  return { operations: importedOperations, skipped };
 }
 
 function createImportedGainOperation(todo) {
@@ -584,9 +616,9 @@ function calculateSummary(operations) {
 
   return {
     basePoints,
-    weeklyBonus: weekly.confirmedBonus,
+    weeklyBonus: weekly.earnedBonus,
     spent,
-    balance: roundHalf(basePoints + weekly.confirmedBonus - spent),
+    balance: roundHalf(basePoints + weekly.earnedBonus - spent),
     currentWeek: weekly.currentWeek
   };
 }
@@ -599,28 +631,28 @@ function calculateWeeklyBonuses(gains) {
     weeks.get(key).push(gain);
   }
 
-  const today = startOfDay(new Date());
-  let confirmedBonus = 0;
+  let earnedBonus = 0;
 
-  for (const [key, entries] of weeks) {
-    const weekStart = parseLocalDate(key);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-    if (weekEnd >= today) continue;
-    confirmedBonus += bonusForWeek(entries);
+  for (const entries of weeks.values()) {
+    if (entries.length < 7) continue;
+    earnedBonus += bonusForWeek(entries);
   }
 
+  const today = startOfDay(new Date());
   const currentKey = mondayKey(formatLocalDate(today));
   const currentEntries = weeks.get(currentKey) || [];
   const qualifyingNights = currentEntries.filter((entry) => Number(entry.points) > 0).length;
   const invalidated = currentEntries.some((entry) => Boolean(entry.lateReset));
+  const complete = currentEntries.length === 7;
+  const currentWeekBonus = complete ? bonusForWeek(currentEntries) : 0;
 
   return {
-    confirmedBonus,
+    earnedBonus,
     currentWeek: {
       qualifyingNights,
       invalidated,
-      projectedBonus: bonusForWeek(currentEntries)
+      complete,
+      earnedBonus: currentWeekBonus
     }
   };
 }
@@ -756,8 +788,10 @@ function render() {
 
   if (summary.currentWeek.invalidated) {
     elements.weekBonusHint.textContent = "本周奖励归零";
-  } else if (summary.currentWeek.projectedBonus > 0) {
-    elements.weekBonusHint.textContent = `周末 +${summary.currentWeek.projectedBonus} 分`;
+  } else if (summary.currentWeek.earnedBonus > 0) {
+    elements.weekBonusHint.textContent = `已获得 +${summary.currentWeek.earnedBonus} 分`;
+  } else if (summary.currentWeek.qualifyingNights >= 5 && !summary.currentWeek.complete) {
+    elements.weekBonusHint.textContent = "记录齐全后结算";
   } else {
     elements.weekBonusHint.textContent = "满 5 晚有奖励";
   }
@@ -917,6 +951,13 @@ function setBusy(value) {
 function setStatus(message, kind) {
   elements.connectionMessage.textContent = message;
   elements.connectionMessage.className = `status-message${kind ? ` ${kind}` : ""}`;
+}
+
+function formatTodoImportSummary(result) {
+  const parts = [];
+  if (result.imported) parts.push(`收进 ${result.imported} 条手表记录`);
+  if (result.skipped) parts.push(`跳过 ${result.skipped} 条日期已记录的待办`);
+  return parts.join("，");
 }
 
 function assertState(state) {
