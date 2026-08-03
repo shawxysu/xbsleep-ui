@@ -10,10 +10,16 @@ const DEFAULT_TODO_PATH = "state.todo.jsonl";
 const TODO_QUEUE_TEMPLATE = '# {"sleepDate":"2026-07-30","sleepTime":"00:00","source":"apple-health"}\n';
 const DEFAULT_SLEEP_TIME = "00:00";
 const DEMO_STARTING_POINTS = 100;
+const DRAW_RULES_VERSION = 2;
+const SLEEP_COIN_SR_THRESHOLD = 15;
+const DIRECT_SR_PROBABILITY = 0.05;
+const BASE_R_PROBABILITY = 0.3;
+const R_PITY_NON_R_LIMIT = 2;
 const DRAW_VIDEO_BY_RARITY = Object.freeze({
   SSR: "assets/ssr.mp4",
   SR: "assets/sr.mp4",
-  R: "assets/r.mp4"
+  R: "assets/r.mp4",
+  N: "assets/n.mp4"
 });
 const RESCUE_CARD_EVALUATION = Object.freeze({
   points: 1,
@@ -42,8 +48,7 @@ const elements = {
   weekNightsValue: document.querySelector("#weekNightsValue"),
   weekBonusHint: document.querySelector("#weekBonusHint"),
   ssrPityValue: document.querySelector("#ssrPityValue"),
-  ssrChanceHint: document.querySelector("#ssrChanceHint"),
-  srPityValue: document.querySelector("#srPityValue"),
+  sleepCoinValue: document.querySelector("#sleepCoinValue"),
   gainForm: document.querySelector("#gainForm"),
   sleepDateInput: document.querySelector("#sleepDateInput"),
   sleepTimeInput: document.querySelector("#sleepTimeInput"),
@@ -54,6 +59,7 @@ const elements = {
   drawVideo: document.querySelector("#drawVideo"),
   drawRarity: document.querySelector("#drawRarity"),
   drawReward: document.querySelector("#drawReward"),
+  drawCoinResult: document.querySelector("#drawCoinResult"),
   confirmDrawButton: document.querySelector("#confirmDrawButton"),
   refreshButton: document.querySelector("#refreshButton"),
   prevMonthButton: document.querySelector("#prevMonthButton"),
@@ -319,17 +325,25 @@ async function submitDraw() {
       const summary = calculateSummary(state.operations);
       if (summary.balance < 1) throw new UserFacingError("当前积分不足 1 分，无法抽奖。");
 
-      const pity = calculatePity(state.operations);
-      const draw = performDraw(pity);
+      const drawState = calculatePity(state.operations);
+      const draw = performDraw(drawState);
       const operation = {
         id: createOperationId(),
         type: "consume",
+        drawRulesVersion: DRAW_RULES_VERSION,
         cost: 1,
         rarity: draw.rarity,
         reward: draw.reward,
-        ssrPull: pity.ssrSince + 1,
-        srPull: pity.srSince + 1,
+        baseRarity: draw.baseRarity,
+        srSource: draw.srSource,
+        ssrPull: drawState.ssrSince + 1,
         ssrProbability: draw.ssrProbability,
+        sleepCoinsBefore: drawState.sleepCoins,
+        sleepCoinGain: draw.sleepCoinGain,
+        sleepCoinsAfter: draw.sleepCoinsAfter,
+        rSinceBefore: drawState.rSince,
+        rSinceAfter: draw.rSinceAfter,
+        rGuaranteed: draw.rGuaranteed || undefined,
         createdAt: new Date().toISOString()
       };
       state.operations.push(operation);
@@ -667,42 +681,89 @@ function bonusForWeek(entries) {
 
 function calculatePity(operations) {
   let ssrSince = 0;
-  let srSince = 0;
+  let sleepCoins = 0;
+  let rSince = 0;
 
   for (const operation of operations) {
     if (operation.type !== "consume") continue;
     if (operation.rarity === "SSR") {
       ssrSince = 0;
-      srSince = 0;
     } else {
       ssrSince += 1;
-      if (operation.rarity === "SR") srSince = 0;
-      else srSince += 1;
+    }
+
+    if (Number(operation.drawRulesVersion) === DRAW_RULES_VERSION) {
+      sleepCoins = readStoredCounter(operation.sleepCoinsAfter, sleepCoins, SLEEP_COIN_SR_THRESHOLD - 1);
+      rSince = readStoredCounter(operation.rSinceAfter, rSince, R_PITY_NON_R_LIMIT);
+    } else if (operation.rarity === "SSR" || operation.rarity === "SR") {
+      sleepCoins = 0;
+      rSince = 0;
     }
   }
-  return { ssrSince, srSince };
+  return { ssrSince, sleepCoins, rSince };
 }
 
-function performDraw(pity) {
-  const ssrPull = pity.ssrSince + 1;
-  const srPull = pity.srSince + 1;
+function performDraw(drawState) {
+  const ssrPull = drawState.ssrSince + 1;
   const ssrProbability = probabilityForSsrPull(ssrPull);
-
+  let baseRarity;
   let rarity;
-  if (secureRandom() < ssrProbability) rarity = "SSR";
-  else if (srPull >= 9 || secureRandom() < 0.06) rarity = "SR";
-  else rarity = "R";
+  let srSource;
+  let sleepCoinGain = 0;
+  let sleepCoinsAfter = drawState.sleepCoins;
+  let rSinceAfter = drawState.rSince;
+  let rGuaranteed = false;
+
+  if (secureRandom() < ssrProbability) {
+    baseRarity = "SSR";
+    rarity = "SSR";
+    sleepCoinsAfter = 0;
+    rSinceAfter = 0;
+  } else if (secureRandom() < DIRECT_SR_PROBABILITY) {
+    baseRarity = "SR";
+    rarity = "SR";
+    srSource = "direct";
+    sleepCoinsAfter = 0;
+    rSinceAfter = 0;
+  } else {
+    rGuaranteed = drawState.rSince >= R_PITY_NON_R_LIMIT;
+    baseRarity = rGuaranteed || secureRandom() < BASE_R_PROBABILITY ? "R" : "N";
+    sleepCoinGain = baseRarity === "R" ? 3 : 1;
+    const accumulatedCoins = drawState.sleepCoins + sleepCoinGain;
+    const upgradedToSr = accumulatedCoins >= SLEEP_COIN_SR_THRESHOLD;
+
+    rarity = upgradedToSr ? "SR" : baseRarity;
+    srSource = upgradedToSr ? "coins" : undefined;
+    sleepCoinsAfter = upgradedToSr ? 0 : accumulatedCoins;
+    rSinceAfter = baseRarity === "R"
+      ? 0
+      : Math.min(R_PITY_NON_R_LIMIT, drawState.rSince + 1);
+  }
 
   const pool = config.REWARDS?.[rarity];
   if (!Array.isArray(pool) || pool.length === 0) {
     throw new UserFacingError(`${rarityLabel(rarity)}还没有填奖励内容。`);
   }
+  const rewards = pool.filter((reward) => typeof reward === "string" && reward.trim());
+  if (!rewards.length) throw new UserFacingError(`${rarityLabel(rarity)}还没有填奖励内容。`);
 
   return {
     rarity,
-    reward: pool[Math.floor(secureRandom() * pool.length)],
-    ssrProbability
+    baseRarity,
+    srSource,
+    reward: rewards[Math.floor(secureRandom() * rewards.length)],
+    ssrProbability,
+    sleepCoinGain,
+    sleepCoinsAfter,
+    rSinceAfter,
+    rGuaranteed
   };
+}
+
+function readStoredCounter(value, fallback, maximum) {
+  return Number.isInteger(value) && value >= 0
+    ? Math.min(value, maximum)
+    : fallback;
 }
 
 function probabilityForSsrPull(pull) {
@@ -778,13 +839,11 @@ function loadSelectedDateRecord() {
 function render() {
   const summary = calculateSummary(currentState.operations);
   const pity = calculatePity(currentState.operations);
-  const nextSsrPull = pity.ssrSince + 1;
 
   elements.balanceValue.textContent = formatPoints(summary.balance);
   elements.weekNightsValue.textContent = String(summary.currentWeek.qualifyingNights);
   elements.ssrPityValue.textContent = String(pity.ssrSince);
-  elements.srPityValue.textContent = String(pity.srSince);
-  elements.ssrChanceHint.textContent = `下抽概率 ${(probabilityForSsrPull(nextSsrPull) * 100).toFixed(nextSsrPull <= 40 ? 1 : 0)}%`;
+  elements.sleepCoinValue.textContent = String(pity.sleepCoins);
 
   if (summary.currentWeek.invalidated) {
     elements.weekBonusHint.textContent = "本周奖励归零";
@@ -890,6 +949,9 @@ function showDrawResult(operation) {
   elements.drawRarity.className = `rarity rarity-${operation.rarity}`;
   elements.drawRarity.textContent = rarityLabel(operation.rarity);
   elements.drawReward.textContent = operation.reward;
+  const coinResult = formatDrawCoinResult(operation);
+  elements.drawCoinResult.textContent = coinResult;
+  elements.drawCoinResult.hidden = !coinResult;
   elements.drawVideo.src = drawVideoForRarity(operation.rarity);
   elements.drawVideo.load();
   elements.drawModal.hidden = false;
@@ -919,6 +981,14 @@ function drawVideoForRarity(rarity) {
   return DRAW_VIDEO_BY_RARITY[rarity] || DRAW_VIDEO_BY_RARITY.R;
 }
 
+function formatDrawCoinResult(operation) {
+  if (operation.rarity === "SSR" || operation.srSource === "direct") return "";
+  if (operation.srSource === "coins") {
+    return `+${operation.sleepCoinGain} 好眠币，达到 ${SLEEP_COIN_SR_THRESHOLD} 枚，已自动升级SR！`;
+  }
+  return `+${operation.sleepCoinGain} 好眠币，现有 ${operation.sleepCoinsAfter}/${SLEEP_COIN_SR_THRESHOLD}`;
+}
+
 function focusElement(element) {
   if (!element || typeof element.focus !== "function") return;
   try {
@@ -931,7 +1001,8 @@ function focusElement(element) {
 function rarityLabel(rarity) {
   if (rarity === "SSR") return "心动大奖";
   if (rarity === "SR") return "甜蜜小惊喜";
-  return "暖暖小奖励";
+  if (rarity === "R") return "暖暖小奖励";
+  return "点滴好眠奖";
 }
 
 function setConnected(connected) {

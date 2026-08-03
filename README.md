@@ -37,7 +37,7 @@ TODO_PATH: "state.todo.jsonl",
 APP_TITLE: "我们的早睡养肤小约定",
 ```
 
-Edit the `REWARDS` arrays to set the actual SSR, SR, and R rewards.
+Edit the `REWARDS` arrays to set the actual SSR, SR, R, and N rewards.
 
 The private data repository is no longer hard-coded in `config.js`. Enter it on the page in the **小账本位置** field, for example `your-github-username/sleep-points-data`. A full GitHub repo URL such as `https://github.com/your-github-username/sleep-points-data` also works.
 
@@ -109,11 +109,13 @@ The Shortcut only needs to append `sleepDate`, `sleepTime`, and `source`; the we
 - Each draw costs 1 point.
 - SSR pulls 1–40: 0.6%.
 - SSR pulls 41–50: `(pull - 40) × 10%`; pull 50 is guaranteed.
-- SR base chance: 6% after the SSR check.
-- If the first 8 pulls after an SR-or-better contain no SR/SSR, pull 9 is at least SR.
-- SSR resets both pity counters; SR resets the SR counter.
+- After the SSR check, the direct SR chance is 5%. A direct SR resets 好眠币 and R pity.
+- After the SSR and direct-SR checks, R has a 30% base chance. After two consecutive base N results, the next result is guaranteed to be at least R.
+- N adds 1 好眠币 and advances R pity; R adds 3 好眠币 and resets R pity. Those underlying N/R effects still apply when the result is upgraded to SR by coins.
+- Reaching 15 or more 好眠币 upgrades an N or R result to SR, resets the coins to 0, and discards any excess.
+- SSR resets SSR pity, 好眠币, and R pity. Older draws still count toward SSR pity, but the new 好眠币 and R-pity counters start at zero.
 - Randomness uses browser crypto when available, with a compatibility fallback for older mobile browsers.
-- Draw results open a confirmation modal and play the matching local video from `assets/r.mp4`, `assets/sr.mp4`, or `assets/ssr.mp4`.
+- Draw results open a confirmation modal and play the matching local video from `assets/n.mp4`, `assets/r.mp4`, `assets/sr.mp4`, or `assets/ssr.mp4`.
 
 ## Security limits
 

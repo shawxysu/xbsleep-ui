@@ -322,9 +322,16 @@ code {
   display: none !important;
 }
 
-.stats-grid {
+.draw-column {
+  min-width: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  align-content: start;
+  gap: 8px;
+}
+
+.draw-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
@@ -439,6 +446,11 @@ code {
   background: var(--mint);
 }
 
+.rarity-N {
+  color: #25537a;
+  background: #d7ecff;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -472,6 +484,14 @@ code {
   display: grid;
   gap: 12px;
   padding: 18px;
+}
+
+.draw-coin-result {
+  margin: 0;
+  color: var(--accent-strong);
+  font-size: 0.88rem;
+  font-weight: 760;
+  line-height: 1.45;
 }
 
 .draw-modal-content h2 {
@@ -639,7 +659,6 @@ footer {
 
 @media (max-width: 850px) {
   .form-grid,
-  .stats-grid,
   .operation-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -742,7 +761,7 @@ footer {
     gap: 12px;
   }
 
-  .stats-grid {
+  .draw-stats-grid {
     grid-template-columns: 1fr 1fr;
     gap: 6px;
   }
@@ -1010,5 +1029,10 @@ footer {
   .rarity-R {
     color: #b7f4e9;
     background: #203f39;
+  }
+
+  .rarity-N {
+    color: #d8ecff;
+    background: #243e57;
   }
 }
